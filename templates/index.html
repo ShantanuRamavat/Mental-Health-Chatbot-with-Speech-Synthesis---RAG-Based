@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Mindful AI</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body>
+    <div class="header">
+        <h1>Mindful AI</h1>
+        <p>Your compassionate mental health companion</p>
+    </div>
+
+    <div class="chat-container">
+        <div id="chatbox"></div>
+        <div id="controls">
+            <form id="chatForm">
+                <input type="text" id="userInput" placeholder="Share your thoughts..." autocomplete="off" autofocus>
+                <button type="submit" id="sendButton"><i class="fas fa-paper-plane"></i></button>
+                <button type="button" id="speakButton" title="Replay last message"><i class="fas fa-volume-up"></i></button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        $(document).ready(function() {
+            let lastBotMessage = "";
+            let synth = window.speechSynthesis;
+            let voicesLoaded = false;
+            
+            // Load voices with fallback
+            function loadVoices() {
+                return new Promise((resolve) => {
+                    let voices = synth.getVoices();
+                    if (voices.length > 0) {
+                        voicesLoaded = true;
+                        resolve(voices);
+                    } else {
+                        synth.onvoiceschanged = () => {
+                            voices = synth.getVoices();
+                            voicesLoaded = true;
+                            resolve(voices);
+                        };
+                        setTimeout(() => {
+                            if (!voicesLoaded) {
+                                voices = synth.getVoices();
+                                resolve(voices);
+                            }
+                        }, 1000);
+                    }
+                });
+            }
+            
+            // Show typing indicator
+            function showTyping() {
+                $('#chatbox').append(`
+                    <div class="message bot-message typing-indicator">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </div>
+                `);
+                $('#chatbox').scrollTop($('#chatbox')[0].scrollHeight);
+                return $('.typing-indicator').last();
+            }
+            
+            // Speak function with error handling
+            function speak(text) {
+                if (!synth) return;
+                
+                synth.cancel();
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.rate = 0.9;
+                utterance.pitch = 1;
+                
+                loadVoices().then(voices => {
+                    const englishVoices = voices.filter(v => v.lang.includes('en'));
+                    if (englishVoices.length > 0) {
+                        const femaleVoice = englishVoices.find(v => v.name.includes('Female'));
+                        utterance.voice = femaleVoice || englishVoices[0];
+                    }
+                    synth.speak(utterance);
+                });
+            }
+            
+            // Form submission handler
+            $('#chatForm').on('submit', function(e) {
+                e.preventDefault();
+                const userInput = $('#userInput').val().trim();
+                if (!userInput) return;
+                
+                // Display user message
+                $('#chatbox').append(`
+                    <div class="message user-message">
+                        ${userInput}
+                    </div>
+                `);
+                $('#userInput').val('').focus();
+                
+                // Show typing indicator
+                const typingElement = showTyping();
+                
+                // Send to server
+                $.post('/ask', { query: userInput })
+                    .done(data => {
+                        lastBotMessage = data.answer;
+                        typingElement.remove();
+                        $('#chatbox').append(`
+                            <div class="message bot-message">
+                                ${data.answer}
+                            </div>
+                        `);
+                        $('#chatbox').scrollTop($('#chatbox')[0].scrollHeight);
+                        speak(data.answer);
+                    })
+                    .fail(() => {
+                        typingElement.remove();
+                        $('#chatbox').append(`
+                            <div class="message bot-message">
+                                Sorry, I encountered an error. Please try again.
+                            </div>
+                        `);
+                        $('#chatbox').scrollTop($('#chatbox')[0].scrollHeight);
+                    });
+                
+                return false;
+            });
+            
+            // Speak button handler
+            $('#speakButton').click(() => {
+                if (lastBotMessage) speak(lastBotMessage);
+            });
+            
+            // Initial voice loading
+            loadVoices();
+            
+            // Welcome message
+            setTimeout(() => {
+                const welcomeMsg = "Hello, I'm Mindful AI. How can I support you today?";
+                $('#chatbox').append(`
+                    <div class="message bot-message">
+                        ${welcomeMsg}
+                    </div>
+                `);
+                lastBotMessage = welcomeMsg;
+                speak(welcomeMsg);
+            }, 500);
+        });
+    </script>
+</body>
+</html>

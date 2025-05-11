@@ -1,0 +1,8 @@
+flask
+langchain
+langchain_groq
+langchain_community
+langchain_core
+sentence-transformers
+chromadb
+pypdf
